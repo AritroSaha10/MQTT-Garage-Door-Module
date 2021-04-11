@@ -1,9 +1,13 @@
 #include <MQTT.h>
 
+// Credentials for MQTT server
+const String mqttServerIP = "MQTT SERVER IP";
+const String mqttUser = "INSERT MQTT USER TO BE USED TO CONNECT TO SERVER";
+const String mqttPassword = "INSERT MQTT PASSWORD";
+
 // MQTT client
 // MQTT("ip address", "port", "keepalive timeout in seconds", "callback method", "max byte size of message")
-// Change the IP 
-MQTT client("HOMEASSISTANT_IP", 1883, 20, callback, 1024);
+MQTT client(mqttServerIP, 1883, 20, callback, 1024);
 
 // Timer to send a heartbeat
 int heartbeatTimer = 0;
@@ -43,7 +47,7 @@ const String availabilityTopic = "homeassistant/cover/garage_door/LWT";
 const String stateTopic = "homeassistant/cover/garage_door/state";
 
 // MQTT AutoDiscovery Configuration Payload that lets H.A know the details of the device
-const String configurationPayload = "{\"name\":\"Garage Door\",\"device_class\":\"cover\",\"state_topic\":\"homeassistant/cover/garage_door/state\",\"availability_topic\":\"homeassistant/cover/garage_door/LWT\",\"command_topic\":\"homeassistant/cover/garage_door/command\",\"device_class\":\"garage\",\"pl_avail\":\"online\",\"pl_not_avail\":\"offline\",\"stat_open\":\"open\",\"stat_opening\":\"opening\",\"stat_clsd\":\"closed\",\"stat_closing\":\"closing\",\"unique_id\":\"ASG11_1\",\"device\":{\"ids\":[\"ASG11\"],\"mf\":\"Axiumin\",\"sw\":\"1.0.0\",\"mdl\":\"Garage Door v1.0.0\",\"name\":\"Garage Door\"}}";
+const String configurationPayload = "{\"name\":\"Garage Door\",\"device_class\":\"cover\",\"state_topic\":\"homeassistant/cover/garage_door/state\",\"availability_topic\":\"homeassistant/cover/garage_door/LWT\",\"command_topic\":\"homeassistant/cover/garage_door/command\",\"device_class\":\"garage\",\"pl_avail\":\"online\",\"pl_not_avail\":\"offline\",\"stat_open\":\"open\",\"stat_opening\":\"opening\",\"stat_clsd\":\"closed\",\"stat_closing\":\"closing\",\"unique_id\":\"ASG11_1\",\"device\":{\"ids\":[\"ASG11\"],\"mf\":\"Aritro Studios\",\"sw\":\"1.0.0\",\"mdl\":\"Garage Door v1.0.0\",\"name\":\"Garage Door\"}}";
 
 // This is called when a message is received.
 void callback(char* topic, byte* payload, unsigned int length) 
@@ -61,7 +65,7 @@ void callback(char* topic, byte* payload, unsigned int length)
         } else if (msg.indexOf("CLOSE") != -1) {
             close_garage();
         } else if (msg.indexOf("STOP") != -1) {
-            // switch the open/close value
+            // switch the open/close value, useful since there's no state management
             isClosed = !isClosed;
             if (isClosed) {
                 client.publish(stateTopic, "closed", true);
@@ -74,9 +78,11 @@ void callback(char* topic, byte* payload, unsigned int length)
 
 // Opens the garage door
 int open_garage(String thisIsOnlyForParticle){
+    /* Let Home Assistant control the state checking since it's sometimes mismatched
     if (!isClosed) {
         return 0;
     }
+    */
     
     // Prevent 2 of the functions colliding with each other
     if (!poweringRelay) {
@@ -95,9 +101,11 @@ int open_garage(String thisIsOnlyForParticle){
 
 // Closes the garage door
 int close_garage(String thisIsOnlyForParticle){
+    /* Let Home Assistant control the state checking since it's sometimes mismatched
     if (isClosed) {
         return 0;
     }
+    */
     
     // Prevent 2 of the functions colliding with each other
     if (!poweringRelay) {
@@ -132,7 +140,7 @@ int reset_photon(String command) {
 void setup() 
 {
     // Connect to the server
-    client.connect("garage_door_opener_photon", "MQTT_USER", "MQTT_PW");
+    client.connect("garage_door_opener_photon", mqttUser, mqttPassword);
     
     // Configure relay pins
     pinMode(relayPin, OUTPUT);
@@ -163,6 +171,7 @@ void loop()
 {
     // Reset device if reset flag rasied
     if (resetFlag) {
+        delay(1500); // Wait 1.5s to allow for the reset request to complete, not waiting causes the connection to timeout
         System.reset();
     }
     
@@ -175,26 +184,6 @@ void loop()
             
             heartbeatTimer = millis();
         }
-        
-        // Update the sensor value every 2s
-        /*
-        if (millis() - sensorUpdateTimer >= 2000) {
-            if (openClose == 0) {
-                // Garage Door is not opening / closing, check isClosed
-                if (isClosed) {
-                    client.publish(stateTopic, "closed", true);
-                } else {
-                    client.publish(stateTopic, "open", true);
-                }
-            } else if (openClose == 1) {
-                client.publish(stateTopic, "opening", true);
-            } else if (openClose == 2) {
-                client.publish(stateTopic, "closing", true);
-            }
-            
-            sensorUpdateTimer = millis();
-        }
-        */
         
         // Check if the timer for the relay power is done
         if (millis() - timer >= 16000 && poweringRelay) {
@@ -226,7 +215,8 @@ void loop()
         client.loop();
     } else {
         Particle.publish("mqttconnection/isconnected", "false");
-        client.connect("garage_door_opener_photon", "MQTT_USER", "MQTT_PW");
-        delay(1000);
+        client.connect("garage_door_opener_photon", mqttUser, mqttPassword);
+        delay(3000);
+        if (!client.isConnected()) reset_photon(""); // Auto reset if it doesn't want to connect
     }
 }
